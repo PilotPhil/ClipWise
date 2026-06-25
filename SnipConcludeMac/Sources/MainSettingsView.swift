@@ -47,14 +47,11 @@ struct MainSettingsView: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 10)
 
-            ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
-                    )
+            VStack(spacing: 0) {
+                Divider()
                 currentTab
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                Divider()
             }
             .padding(.horizontal, 12)
 
@@ -174,22 +171,29 @@ struct MainSettingsView: View {
     }
 
     private var generalTab: some View {
-        Form {
+        VStack(alignment: .leading, spacing: 14) {
             Toggle("启动时显示主窗口", isOn: $draft.showControlWindowOnStartup)
+
             Stepper(value: $draft.resultPanelHeight, in: 120...600, step: 20) {
                 Text("结果面板高度：\(draft.resultPanelHeight) px")
             }
+
             Stepper(value: $draft.requestTimeoutSeconds, in: 10...600, step: 10) {
                 Text("AI 请求超时：\(draft.requestTimeoutSeconds) 秒")
             }
-            HStack {
+
+            HStack(spacing: 10) {
                 Text("截图保存目录")
+                    .foregroundStyle(.secondary)
                 TextField("", text: $draft.saveDirectory)
-                    .frame(width: 300)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 320)
                 Button("浏览") { chooseSaveDirectory() }
             }
+
+            Spacer()
         }
-        .padding(14)
+        .padding(18)
     }
 
     private var controlTab: some View {
@@ -224,15 +228,6 @@ struct MainSettingsView: View {
                         .lineLimit(1)
                 }
             }
-            .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(nsColor: .windowBackgroundColor))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
-            )
 
             Spacer()
         }
@@ -277,9 +272,7 @@ struct MainSettingsView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(cardBackground)
             }
             .padding(18)
         }
@@ -347,9 +340,7 @@ struct MainSettingsView: View {
                         }
                     }
                 }
-                .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(cardBackground)
             }
             .padding(18)
         }
@@ -396,15 +387,6 @@ struct MainSettingsView: View {
             )
         }
         .buttonStyle(.plain)
-    }
-
-    private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: 10)
-            .fill(Color(nsColor: .windowBackgroundColor))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
-            )
     }
 
     private func modelProfileRow(_ profile: ModelProfile) -> some View {

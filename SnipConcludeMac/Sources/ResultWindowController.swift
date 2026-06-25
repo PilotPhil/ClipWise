@@ -13,6 +13,7 @@ final class ResultWindowController: NSWindowController, NSToolbarDelegate {
     private var latestResult = ""
     private var isPinned = false
     private var pinButton: NSButton?
+    private var titlebarAccessoryController: NSTitlebarAccessoryViewController?
 
     init(capture: CaptureResult, actionProfiles: [AIActionProfile], resultPanelHeight: Int) {
         self.capture = capture
@@ -30,12 +31,11 @@ final class ResultWindowController: NSWindowController, NSToolbarDelegate {
             defer: false
         )
         window.title = "ClipWise - 截图智读助手"
-        window.toolbarStyle = .unifiedCompact
-        window.titleVisibility = .hidden
+        window.titleVisibility = .visible
         window.minSize = NSSize(width: min(windowWidth, Self.maximumWindowWidth()), height: 420)
         super.init(window: window)
         buildContent()
-        installToolbar()
+        installTitlebarAccessory()
         window.center()
     }
 
@@ -172,18 +172,32 @@ final class ResultWindowController: NSWindowController, NSToolbarDelegate {
         return section
     }
 
-    private func installToolbar() {
+    private func installTitlebarAccessory() {
         guard let window else { return }
-        let toolbar = NSToolbar(identifier: "ClipWiseResultToolbar")
-        toolbar.delegate = self
-        toolbar.displayMode = .iconOnly
-        toolbar.sizeMode = .small
-        toolbar.allowsUserCustomization = false
-        toolbar.autosavesConfiguration = false
-        window.toolbar = toolbar
+        rebuildToolbarActionsMap()
+
+        let groupView = toolbarActionGroupView()
+        let hostWidth = toolbarActionGroupWidth() + 12
+        let hostHeight: CGFloat = 44
+        let host = NSView(frame: NSRect(x: 0, y: 0, width: hostWidth, height: hostHeight))
+        host.translatesAutoresizingMaskIntoConstraints = false
+        host.addSubview(groupView)
+
+        NSLayoutConstraint.activate([
+            host.widthAnchor.constraint(equalToConstant: hostWidth),
+            host.heightAnchor.constraint(equalToConstant: hostHeight),
+            groupView.trailingAnchor.constraint(equalTo: host.trailingAnchor, constant: -6),
+            groupView.centerYAnchor.constraint(equalTo: host.centerYAnchor),
+        ])
+
+        let accessory = NSTitlebarAccessoryViewController()
+        accessory.layoutAttribute = .right
+        accessory.view = host
+        titlebarAccessoryController = accessory
+        window.addTitlebarAccessoryViewController(accessory)
     }
 
-    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+    private func rebuildToolbarActionsMap() {
         let builtInActions = actionProfiles.filter(\.isBuiltIn)
         let customActions = actionProfiles.filter { !$0.isBuiltIn }
 
@@ -194,6 +208,10 @@ final class ResultWindowController: NSWindowController, NSToolbarDelegate {
         for action in ResultUtilityAction.toolbarActions {
             toolbarActionsByID[action.toolbarIdentifier] = .utility(action)
         }
+    }
+
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        rebuildToolbarActionsMap()
         return [.flexibleSpace, .clipWiseTitle, .flexibleSpace, .clipWiseActionGroup]
     }
 
@@ -229,9 +247,22 @@ final class ResultWindowController: NSWindowController, NSToolbarDelegate {
             return nil
         }
         let item = NSToolbarItem(itemIdentifier: .clipWiseActionGroup)
-        item.view = toolbarActionGroupView()
+        let groupView = toolbarActionGroupView()
+        item.view = groupView
         item.visibilityPriority = .high
         return item
+    }
+
+    private func toolbarActionGroupWidth() -> CGFloat {
+        toolbarActionGroupContentWidth() + 16
+    }
+
+    private func toolbarActionGroupContentWidth() -> CGFloat {
+        let customActions = actionProfiles.filter { !$0.isBuiltIn }
+        let buttonCount = actionProfiles.count + ResultUtilityAction.toolbarActions.count + 1
+        let separatorCount = 1 + (customActions.isEmpty ? 0 : 1)
+        let arrangedCount = buttonCount + separatorCount
+        return CGFloat(buttonCount * 28 + separatorCount * 4 + max(0, arrangedCount - 1) * 4)
     }
 
     private func toolbarActionGroupView() -> NSView {
@@ -245,53 +276,58 @@ final class ResultWindowController: NSWindowController, NSToolbarDelegate {
         stack.translatesAutoresizingMaskIntoConstraints = false
 
         for action in builtInActions {
-            stack.addArrangedSubview(toolbarButton(for: .ai(action), identifier: action.toolbarIdentifier))
+            stack.addArrangedSubview(toolbarButtonSlot(for: .ai(action), identifier: action.toolbarIdentifier))
         }
         if !customActions.isEmpty {
             stack.addArrangedSubview(separatorView())
             for action in customActions {
-                stack.addArrangedSubview(toolbarButton(for: .ai(action), identifier: action.toolbarIdentifier))
+                stack.addArrangedSubview(toolbarButtonSlot(for: .ai(action), identifier: action.toolbarIdentifier))
             }
         }
         stack.addArrangedSubview(separatorView())
         for action in ResultUtilityAction.toolbarActions {
-            stack.addArrangedSubview(toolbarButton(for: .utility(action), identifier: action.toolbarIdentifier))
+            stack.addArrangedSubview(toolbarButtonSlot(for: .utility(action), identifier: action.toolbarIdentifier))
         }
 
         let pinBtn = pinToggleButton()
         pinButton = pinBtn
-        stack.addArrangedSubview(pinBtn)
+        stack.addArrangedSubview(toolbarButtonSlot(containing: pinBtn))
 
         let wrapper = NSView()
         wrapper.translatesAutoresizingMaskIntoConstraints = false
         wrapper.addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor),
-            stack.topAnchor.constraint(equalTo: wrapper.topAnchor),
-            stack.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor),
-            wrapper.heightAnchor.constraint(equalToConstant: 28),
+            stack.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor, constant: 8),
+            stack.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor, constant: -8),
+            stack.centerYAnchor.constraint(equalTo: wrapper.centerYAnchor),
+            wrapper.widthAnchor.constraint(equalToConstant: toolbarActionGroupWidth()),
+            wrapper.heightAnchor.constraint(equalToConstant: 36),
         ])
         return wrapper
     }
 
-    private func toolbarButton(for action: ResultToolbarAction, identifier: NSToolbarItem.Identifier) -> NSButton {
-        let button = NSButton(
+    private func toolbarButtonSlot(for action: ResultToolbarAction, identifier: NSToolbarItem.Identifier) -> NSView {
+        let button = ResultToolbarIconButton(
             image: action.image,
             target: self,
             action: #selector(toolbarButtonPressed(_:))
         )
         button.identifier = NSUserInterfaceItemIdentifier(identifier.rawValue)
-        button.bezelStyle = .texturedRounded
-        button.isBordered = true
-        button.imageScaling = .scaleProportionallyDown
         button.toolTip = action.tooltip
-        button.translatesAutoresizingMaskIntoConstraints = false
+        return toolbarButtonSlot(containing: button)
+    }
+
+    private func toolbarButtonSlot(containing button: NSButton) -> NSView {
+        let slot = NSView()
+        slot.translatesAutoresizingMaskIntoConstraints = false
+        slot.addSubview(button)
         NSLayoutConstraint.activate([
-            button.widthAnchor.constraint(equalToConstant: 30),
-            button.heightAnchor.constraint(equalToConstant: 28),
+            slot.widthAnchor.constraint(equalToConstant: 28),
+            slot.heightAnchor.constraint(equalToConstant: 28),
+            button.centerXAnchor.constraint(equalTo: slot.centerXAnchor),
+            button.centerYAnchor.constraint(equalTo: slot.centerYAnchor),
         ])
-        return button
+        return slot
     }
 
     private func separatorView() -> NSView {
@@ -316,20 +352,12 @@ final class ResultWindowController: NSWindowController, NSToolbarDelegate {
     private func pinToggleButton() -> NSButton {
         let imageName = isPinned ? "pin.fill" : "pin"
         let image = NSImage(systemSymbolName: imageName, accessibilityDescription: "窗口置顶")
-        let button = NSButton(
+        let button = ResultToolbarIconButton(
             image: image ?? NSImage(),
             target: self,
             action: #selector(togglePin(_:))
         )
-        button.bezelStyle = .texturedRounded
-        button.isBordered = true
-        button.imageScaling = .scaleProportionallyDown
         button.toolTip = isPinned ? "取消置顶" : "窗口置顶"
-        button.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            button.widthAnchor.constraint(equalToConstant: 30),
-            button.heightAnchor.constraint(equalToConstant: 28),
-        ])
         return button
     }
 
@@ -403,6 +431,66 @@ private enum ResultToolbarAction {
                 ?? NSImage(systemSymbolName: "sparkles", accessibilityDescription: action.tooltip)
                 ?? NSImage()
         }
+    }
+}
+
+private final class ResultToolbarIconButton: NSButton {
+    private let normalBackground = NSColor.clear.cgColor
+    private let hoverBackground = NSColor(calibratedRed: 0.87, green: 0.94, blue: 1.0, alpha: 1).cgColor
+
+    init(image: NSImage, target: AnyObject?, action: Selector?) {
+        super.init(frame: NSRect(x: 0, y: 0, width: 28, height: 28))
+        self.image = image
+        self.target = target
+        self.action = action
+
+        setButtonType(.momentaryChange)
+        bezelStyle = .regularSquare
+        isBordered = false
+        imagePosition = .imageOnly
+        imageScaling = .scaleProportionallyDown
+        alignment = .center
+        focusRingType = .none
+        contentTintColor = .labelColor
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+        layer?.cornerRadius = 7
+        layer?.masksToBounds = true
+        layer?.backgroundColor = normalBackground
+
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: 28),
+            heightAnchor.constraint(equalToConstant: 28),
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach { removeTrackingArea($0) }
+        addTrackingArea(
+            NSTrackingArea(
+                rect: bounds,
+                options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
+                owner: self,
+                userInfo: nil
+            )
+        )
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        layer?.backgroundColor = hoverBackground
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        layer?.backgroundColor = normalBackground
+    }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: 28, height: 28)
     }
 }
 
