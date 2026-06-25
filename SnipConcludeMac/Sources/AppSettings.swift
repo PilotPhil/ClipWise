@@ -241,6 +241,7 @@ struct HotkeySpec: Codable, Equatable, Sendable {
     var shift = true
     var option = false
     var command = false
+    var fn = false
 
     var displayText: String {
         var parts: [String] = []
@@ -248,6 +249,7 @@ struct HotkeySpec: Codable, Equatable, Sendable {
         if shift { parts.append("Shift") }
         if option { parts.append("Option") }
         if command { parts.append("Command") }
+        if fn { parts.append("Fn") }
         parts.append(key.uppercased())
         return parts.joined(separator: " + ")
     }

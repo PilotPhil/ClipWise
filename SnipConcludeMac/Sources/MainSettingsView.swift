@@ -212,6 +212,7 @@ struct MainSettingsView: View {
                     modifierToggle("Shift", isOn: $draft.captureHotkey.shift)
                     modifierToggle("Option", isOn: $draft.captureHotkey.option)
                     modifierToggle("Command", isOn: $draft.captureHotkey.command)
+                    modifierToggle("Fn", isOn: $draft.captureHotkey.fn)
                 }
 
                 HStack(spacing: 10) {

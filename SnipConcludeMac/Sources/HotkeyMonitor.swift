@@ -97,6 +97,7 @@ final class HotkeyMonitor {
         guard flags.contains(.shift) == hotkey.shift else { return false }
         guard flags.contains(.option) == hotkey.option else { return false }
         guard flags.contains(.command) == hotkey.command else { return false }
+        guard flags.contains(.function) == hotkey.fn else { return false }
         return event.charactersIgnoringModifiers?.lowercased() == hotkey.key.lowercased()
     }
 
@@ -107,6 +108,7 @@ final class HotkeyMonitor {
         guard flags.contains(.maskShift) == hotkey.shift else { return false }
         guard flags.contains(.maskAlternate) == hotkey.option else { return false }
         guard flags.contains(.maskCommand) == hotkey.command else { return false }
+        guard flags.contains(.maskSecondaryFn) == hotkey.fn else { return false }
         guard let keyCode = Self.keyCode(for: hotkey.key) else { return false }
         return CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode)) == keyCode
     }
