@@ -114,18 +114,63 @@ struct MainSettingsView: View {
     }
 
     private var welcomeTab: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("ClipWise")
-                .font(.system(size: 22, weight: .bold))
-            Text("截图后用本地视觉模型翻译、OCR 或总结图片文字")
-                .foregroundStyle(.secondary)
-            Text(statusText)
-                .font(.system(size: 13))
-                .textSelection(.enabled)
-                .padding(.top, 4)
+        HStack(spacing: 0) {
+            // Left: brand & info
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("ClipWise")
+                        .font(.system(size: 22, weight: .bold))
+                    Text("截图智读助手")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                }
+
+                Text("按下全局快捷键截图，调用本地视觉语言模型\n进行翻译、OCR 识别或智能总结。")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(4)
+
+                Divider()
+
+                HStack(spacing: 6) {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                    Text(statusText)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .lineLimit(2)
+                }
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color(nsColor: .textBackgroundColor))
+                )
+
+                Spacer()
+            }
+            .padding(18)
+
             Spacer()
+
+            // Right: decorative icon
+            VStack {
+                Spacer()
+                Image(systemName: "sparkles.rectangle.stack.fill")
+                    .font(.system(size: 64))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.blue, .purple.opacity(0.7)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .opacity(0.5)
+                    .padding(.trailing, 24)
+                    .padding(.bottom, 18)
+            }
         }
-        .padding(14)
     }
 
     private var generalTab: some View {

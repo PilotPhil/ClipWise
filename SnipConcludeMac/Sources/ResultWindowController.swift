@@ -11,6 +11,8 @@ final class ResultWindowController: NSWindowController, NSToolbarDelegate {
     private let textView = NSTextView()
     private var toolbarActionsByID: [NSToolbarItem.Identifier: ResultToolbarAction] = [:]
     private var latestResult = ""
+    private var isPinned = false
+    private var pinButton: NSButton?
 
     init(capture: CaptureResult, actionProfiles: [AIActionProfile], resultPanelHeight: Int) {
         self.capture = capture
@@ -27,9 +29,9 @@ final class ResultWindowController: NSWindowController, NSToolbarDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "ClipWise 截图结果"
+        window.title = "ClipWise - 截图智读助手"
         window.toolbarStyle = .unifiedCompact
-        window.titleVisibility = .visible
+        window.titleVisibility = .hidden
         window.minSize = NSSize(width: min(windowWidth, Self.maximumWindowWidth()), height: 420)
         super.init(window: window)
         buildContent()
@@ -192,7 +194,7 @@ final class ResultWindowController: NSWindowController, NSToolbarDelegate {
         for action in ResultUtilityAction.toolbarActions {
             toolbarActionsByID[action.toolbarIdentifier] = .utility(action)
         }
-        return [.flexibleSpace, .clipWiseActionGroup]
+        return [.flexibleSpace, .clipWiseTitle, .flexibleSpace, .clipWiseActionGroup]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -204,6 +206,25 @@ final class ResultWindowController: NSWindowController, NSToolbarDelegate {
         itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
         willBeInsertedIntoToolbar flag: Bool
     ) -> NSToolbarItem? {
+        if itemIdentifier == .clipWiseTitle {
+            let item = NSToolbarItem(itemIdentifier: .clipWiseTitle)
+            let label = NSTextField(labelWithString: "ClipWise - 截图智读助手")
+            label.font = .systemFont(ofSize: 13, weight: .semibold)
+            label.textColor = .labelColor
+            label.alignment = .center
+            label.translatesAutoresizingMaskIntoConstraints = false
+            let wrapper = NSView()
+            wrapper.translatesAutoresizingMaskIntoConstraints = false
+            wrapper.addSubview(label)
+            NSLayoutConstraint.activate([
+                label.centerXAnchor.constraint(equalTo: wrapper.centerXAnchor),
+                label.centerYAnchor.constraint(equalTo: wrapper.centerYAnchor),
+                wrapper.heightAnchor.constraint(equalToConstant: 28),
+            ])
+            item.view = wrapper
+            item.visibilityPriority = .high
+            return item
+        }
         guard itemIdentifier == .clipWiseActionGroup else {
             return nil
         }
@@ -237,6 +258,10 @@ final class ResultWindowController: NSWindowController, NSToolbarDelegate {
             stack.addArrangedSubview(toolbarButton(for: .utility(action), identifier: action.toolbarIdentifier))
         }
 
+        let pinBtn = pinToggleButton()
+        pinButton = pinBtn
+        stack.addArrangedSubview(pinBtn)
+
         let wrapper = NSView()
         wrapper.translatesAutoresizingMaskIntoConstraints = false
         wrapper.addSubview(stack)
@@ -258,7 +283,7 @@ final class ResultWindowController: NSWindowController, NSToolbarDelegate {
         )
         button.identifier = NSUserInterfaceItemIdentifier(identifier.rawValue)
         button.bezelStyle = .texturedRounded
-        button.isBordered = false
+        button.isBordered = true
         button.imageScaling = .scaleProportionallyDown
         button.toolTip = action.tooltip
         button.translatesAutoresizingMaskIntoConstraints = false
@@ -286,6 +311,34 @@ final class ResultWindowController: NSWindowController, NSToolbarDelegate {
             line.centerYAnchor.constraint(equalTo: view.centerYAnchor),
         ])
         return view
+    }
+
+    private func pinToggleButton() -> NSButton {
+        let imageName = isPinned ? "pin.fill" : "pin"
+        let image = NSImage(systemSymbolName: imageName, accessibilityDescription: "窗口置顶")
+        let button = NSButton(
+            image: image ?? NSImage(),
+            target: self,
+            action: #selector(togglePin(_:))
+        )
+        button.bezelStyle = .texturedRounded
+        button.isBordered = true
+        button.imageScaling = .scaleProportionallyDown
+        button.toolTip = isPinned ? "取消置顶" : "窗口置顶"
+        button.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            button.widthAnchor.constraint(equalToConstant: 30),
+            button.heightAnchor.constraint(equalToConstant: 28),
+        ])
+        return button
+    }
+
+    @objc private func togglePin(_ sender: NSButton) {
+        isPinned.toggle()
+        let imageName = isPinned ? "pin.fill" : "pin"
+        sender.image = NSImage(systemSymbolName: imageName, accessibilityDescription: "窗口置顶")
+        sender.toolTip = isPinned ? "取消置顶" : "窗口置顶"
+        window?.level = isPinned ? .floating : .normal
     }
 
     @objc private func toolbarButtonPressed(_ sender: NSButton) {
@@ -371,6 +424,7 @@ private extension AIActionProfile {
 }
 
 private extension NSToolbarItem.Identifier {
+    static let clipWiseTitle = NSToolbarItem.Identifier("ClipWise.title")
     static let clipWiseActionGroup = NSToolbarItem.Identifier("ClipWise.actionGroup")
     static let clipWiseAICustomSeparator = NSToolbarItem.Identifier("ClipWise.separator.aiCustom")
     static let clipWiseUtilitySeparator = NSToolbarItem.Identifier("ClipWise.separator.utility")

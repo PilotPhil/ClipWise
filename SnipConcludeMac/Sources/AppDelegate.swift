@@ -108,7 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "ClipWise"
+        window.title = "ClipWise - 截图智读助手"
         window.contentViewController = NSHostingController(rootView: rootView)
         if mainWindow == nil {
             window.center()
