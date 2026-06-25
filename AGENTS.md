@@ -24,6 +24,7 @@ ClipWise，中文名“截图智读助手”，是一个截图后调用本地视
 - Settings persistence: JSON under `~/Library/Application Support/ClipWise/settings.json`
 - Model switching: each model profile stores model name, API base URL, and API key.
 - Custom AI actions: each action profile stores toolbar name, SF Symbol icon name, optional uploaded PNG icon data, prompt, and whether it is built-in.
+- Capture privacy option: `hideWindowsDuringCapture` temporarily hides visible ClipWise windows before screenshot selection, then restores them after the selection completes or fails. Both the global hotkey and the result-window recapture button must use the same `AppDelegate.startCapture()` path.
 - Legacy settings fallback: `~/Library/Application Support/SnipConclude/settings.json`
 
 Build and run:
@@ -86,11 +87,11 @@ python snip_conclude.py
 - `SnipConcludeMac/Sources/main.swift`
   App entrypoint.
 - `SnipConcludeMac/Sources/AppDelegate.swift`
-  App lifecycle, main window creation, hotkey registration, screenshot flow, and AI action handling.
+  App lifecycle, result-window creation, settings-window creation, status bar item, hotkey registration, screenshot flow, temporary window hiding during capture, and AI action handling.
 - `SnipConcludeMac/Sources/AppSettings.swift`
-  User settings model and JSON persistence. Stores hotkey settings, selected model profile, per-model URL/API Key configuration, and custom AI action profiles.
+  User settings model and JSON persistence. Stores hotkey settings, selected model profile, per-model URL/API Key configuration, custom AI action profiles, and whether ClipWise windows should be hidden during screenshot selection.
 - `SnipConcludeMac/Sources/MainSettingsView.swift`
-  Main settings window. Includes tabs: 欢迎、通用、控制、模型提供商、自定义、关于.
+  Settings window. Includes tabs: 通用、控制、模型提供商、自定义、关于. It intentionally does not include the old welcome tab or a start-screenshot button.
 - `SnipConcludeMac/Sources/HotkeyMonitor.swift`
   Global shortcut monitoring. Prefer the CGEvent Tap path so shortcuts work even when the main window is covered or minimized. Requires macOS Accessibility permission.
 - `SnipConcludeMac/Sources/ScreenshotController.swift`
@@ -98,7 +99,7 @@ python snip_conclude.py
 - `SnipConcludeMac/Sources/CaptureResult.swift`
   Screenshot image and PNG data container.
 - `SnipConcludeMac/Sources/ResultWindowController.swift`
-  Screenshot result window with native title bar toolbar actions.
+  Primary app window. Shows screenshot content, screenshot controls, AI result tabs, result utility actions, settings/pin titlebar buttons, and the “截图时隐藏窗口” checkbox before “重新截图”.
 - `SnipConcludeMac/Sources/OpenAICompatibleClient.swift`
   OpenAI-compatible `/v1/chat/completions` request client.
 - `scripts/generate_icons.swift`
@@ -140,6 +141,8 @@ python snip_conclude.py
 - AI API key may be empty.
 - The model provider tab supports adding model profiles with model name, URL, and API key. Adding, selecting, and deleting profiles is saved immediately.
 - The custom tab supports editing, adding, and deleting AI actions. Deletes require confirmation. Icons can use built-in SF Symbols or an uploaded image. Result-window toolbar shows built-in AI actions, a vertical separator, custom AI actions, another separator, then copy/save utility actions.
+- The result window is the main window. The gear button opens the separate settings window.
+- The “截图时隐藏窗口” checkbox appears before “重新截图”. When enabled, ClipWise hides its visible windows before selecting a screenshot and restores them afterward; this applies to both shortcut-triggered and button-triggered screenshots.
 - Global screenshot hotkey should still work when the ClipWise window is hidden, covered, or minimized, provided Accessibility permission is granted.
 - Screenshot capture should preserve the selected region without offset on Retina and multi-screen setups by converting AppKit coordinates before capture.
 - The macOS status bar item should remain available while the app runs and exposes “显示主界面” and “退出”.
@@ -152,6 +155,7 @@ python snip_conclude.py
 - Do not remove legacy settings fallback paths unless the user explicitly asks for cleanup.
 - Do not replace the screenshot coordinate conversion with raw selection rect capture; that reintroduces region offset bugs.
 - Do not downgrade hotkey handling back to only `NSEvent.addGlobalMonitorForEvents`; that can fail when the app window is not active/visible.
+- Keep all screenshot entry points routed through `AppDelegate.startCapture()` so window hiding, coordinate handling, and restoration behavior stay consistent.
 - If icon styling changes, edit `scripts/generate_icons.swift` and regenerate assets instead of hand-editing generated PNGs.
 - Use `apply_patch` for manual edits.
 - Run `swift build` after Swift changes. It may require broader filesystem access because SwiftPM writes to Xcode/Swift caches outside the workspace.

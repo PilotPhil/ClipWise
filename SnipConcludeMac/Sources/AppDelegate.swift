@@ -3,7 +3,7 @@ import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var mainWindow: NSWindow?
+    private var settingsWindow: NSWindow?
     private var statusItem: NSStatusItem?
     private var hotkeyMonitor: HotkeyMonitor?
     private let settingsStore = SettingsStore()
@@ -14,7 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMainMenu()
         installStatusItem()
-        showMainWindow()
+        showResultWindow(capture: nil)
         installHotkey()
     }
 
@@ -64,7 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(
             NSMenuItem(
                 title: "显示主界面",
-                action: #selector(showMainWindowFromStatusItem),
+                action: #selector(showResultWindowFromStatusItem),
                 keyEquivalent: ""
             )
         )
@@ -84,33 +84,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ?? Bundle.module.image(forResource: "StatusBarTemplate")
     }
 
-    @objc private func showMainWindowFromStatusItem() {
-        showMainWindow()
+    @objc private func showResultWindowFromStatusItem() {
+        showResultWindow(capture: nil)
     }
 
-    private func showMainWindow() {
+    private func showSettingsWindow() {
         let rootView = MainSettingsView(
             settings: settingsStore.settings,
-            statusText: startupStatusText(),
-            onStartCapture: { [weak self] in self?.startCapture() },
             onSaveSettings: { [weak self] newSettings in
                 self?.settingsStore.save(newSettings)
                 self?.installHotkey()
+                self?.resultWindowController?.updateActionProfiles(newSettings.actionProfiles)
+                self?.resultWindowController?.setHideWindowsDuringCapture(newSettings.hideWindowsDuringCapture)
             },
             onQuit: {
                 NSApplication.shared.terminate(nil)
             }
         )
 
-        let window = mainWindow ?? NSWindow(
+        let window = settingsWindow ?? NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 560, height: 410),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
-        window.title = "ClipWise - 截图智读助手"
+        window.title = "ClipWise 设置"
+        window.isReleasedWhenClosed = false
         window.contentViewController = NSHostingController(rootView: rootView)
-        if mainWindow == nil {
+        if settingsWindow == nil {
             window.center()
         }
         if window.isMiniaturized {
@@ -118,7 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         window.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
-        mainWindow = window
+        settingsWindow = window
     }
 
     private func installHotkey() {
@@ -130,8 +131,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startCapture() {
+        let windowsToRestore = hideWindowsForCaptureIfNeeded()
+        let delay: DispatchTimeInterval = windowsToRestore.isEmpty ? .milliseconds(0) : .milliseconds(160)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self else { return }
+            self.startCaptureSelection(restoring: windowsToRestore)
+        }
+    }
+
+    private func startCaptureSelection(restoring windowsToRestore: [NSWindow]) {
         screenshotController.startSelection { [weak self] result in
             guard let self else { return }
+            self.restoreWindowsAfterCapture(windowsToRestore)
             switch result {
             case .success(let capture):
                 self.showResultWindow(capture: capture)
@@ -141,39 +153,81 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func showResultWindow(capture: CaptureResult) {
+    private func hideWindowsForCaptureIfNeeded() -> [NSWindow] {
+        guard settingsStore.settings.hideWindowsDuringCapture else { return [] }
+        let windows = NSApplication.shared.windows.filter { window in
+            window.isVisible && !window.isMiniaturized
+        }
+        windows.forEach { $0.orderOut(nil) }
+        return windows
+    }
+
+    private func restoreWindowsAfterCapture(_ windows: [NSWindow]) {
+        guard !windows.isEmpty else { return }
+        windows.forEach { window in
+            if !window.isVisible {
+                window.makeKeyAndOrderFront(nil)
+            }
+        }
+        NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+
+    private func showResultWindow(capture: CaptureResult?) {
         let settings = settingsStore.settings
-        let controller = ResultWindowController(
-            capture: capture,
-            actionProfiles: settings.actionProfiles,
-            resultPanelHeight: settings.resultPanelHeight
-        )
-        controller.onAIAction = { [weak self, weak controller] action in
-            guard let self, let controller else { return }
-            self.handleAIAction(action, capture: capture, controller: controller)
+        let controller: ResultWindowController
+        if let existing = resultWindowController {
+            controller = existing
+            controller.updateActionProfiles(settings.actionProfiles)
+            controller.setHideWindowsDuringCapture(settings.hideWindowsDuringCapture)
+            if let capture {
+                controller.updateCapture(capture)
+            }
+        } else {
+            controller = ResultWindowController(
+                capture: capture,
+                actionProfiles: settings.actionProfiles,
+                resultPanelHeight: settings.resultPanelHeight,
+                hideWindowsDuringCapture: settings.hideWindowsDuringCapture
+            )
+            controller.onAIAction = { [weak self, weak controller] action in
+                guard let self, let controller else { return }
+                self.handleAIAction(action, controller: controller)
+            }
+            controller.onRecapture = { [weak self] in
+                self?.startCapture()
+            }
+            controller.onShowSettings = { [weak self] in
+                self?.showSettingsWindow()
+            }
+            controller.onHideWindowsDuringCaptureChanged = { [weak self] value in
+                guard let self else { return }
+                var settings = self.settingsStore.settings
+                settings.hideWindowsDuringCapture = value
+                self.settingsStore.save(settings)
+            }
+            resultWindowController = controller
         }
-        controller.onUtilityAction = { [weak self, weak controller] action in
-            guard let self, let controller else { return }
-            self.handleUtilityAction(action, controller: controller)
+        if let window = controller.window, window.isMiniaturized {
+            window.deminiaturize(nil)
         }
-        resultWindowController = controller
         controller.showWindow(nil)
+        controller.window?.makeKeyAndOrderFront(nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
     }
 
-    private func handleUtilityAction(_ action: ResultUtilityAction, controller: ResultWindowController) {
-        switch action {
-        case .copy:
-            controller.copyLatestResult()
-        case .save:
-            controller.saveImage()
+    private func handleAIAction(_ action: AIActionProfile, controller: ResultWindowController) {
+        guard let capture = controller.currentCapture else {
+            controller.showResult("请先截图，然后再执行“\(action.name)”。")
+            return
         }
-    }
-
-    private func handleAIAction(_ action: AIActionProfile, capture: CaptureResult, controller: ResultWindowController) {
         controller.showResult("正在执行“\(action.name)”，请稍候...")
+        controller.setProcessing(true)
         let settings = settingsStore.settings
         let imagePNG = capture.pngData
         Task { @MainActor in
+            defer {
+                controller.setProcessing(false)
+            }
             do {
                 let text = try await OpenAICompatibleClient().process(action: action, imagePNG: imagePNG, settings: settings)
                 controller.showResult(text)
@@ -181,22 +235,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 controller.showResult("处理失败：\(error.localizedDescription)")
             }
         }
-    }
-
-    private func startupStatusText() -> String {
-        let settings = settingsStore.settings
-        var lines = [
-            "ClipWise 截图智读助手已启动。",
-            "",
-            "快捷键：\(settings.captureHotkey.displayText)",
-            "也可以点击本窗口的“开始截图”。",
-            "AI 接口：\(settings.baseURL)",
-            "模型：\(settings.model)",
-        ]
-        lines.append("")
-        lines.append("提示：")
-        lines.append("- macOS 首次运行可能需要授予“屏幕录制”和“辅助功能”权限。")
-        return lines.joined(separator: "\n")
     }
 
     private func showError(_ message: String) {

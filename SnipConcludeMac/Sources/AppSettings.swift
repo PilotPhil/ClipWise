@@ -82,6 +82,7 @@ struct AppSettings: Codable, Equatable, Sendable {
     var activeModelProfileID = "default"
     var actionProfiles = AIActionProfile.defaultProfiles
     var requestTimeoutSeconds = 120
+    var hideWindowsDuringCapture = false
 
     init() {}
 
@@ -99,6 +100,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         case activeModelProfileID
         case actionProfiles
         case requestTimeoutSeconds
+        case hideWindowsDuringCapture
     }
 
     init(from decoder: Decoder) throws {
@@ -117,6 +119,7 @@ struct AppSettings: Codable, Equatable, Sendable {
         activeModelProfileID = try container.decodeIfPresent(String.self, forKey: .activeModelProfileID) ?? ""
         actionProfiles = try container.decodeIfPresent([AIActionProfile].self, forKey: .actionProfiles) ?? defaults.actionProfiles
         requestTimeoutSeconds = try container.decodeIfPresent(Int.self, forKey: .requestTimeoutSeconds) ?? defaults.requestTimeoutSeconds
+        hideWindowsDuringCapture = try container.decodeIfPresent(Bool.self, forKey: .hideWindowsDuringCapture) ?? defaults.hideWindowsDuringCapture
 
         if modelProfiles.isEmpty {
             modelProfiles = Self.legacyProfiles(modelOptions: modelOptions, model: model, baseURL: baseURL, apiKey: apiKey)

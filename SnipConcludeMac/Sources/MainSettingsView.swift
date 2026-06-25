@@ -3,7 +3,6 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 private enum SettingsTab: String, CaseIterable, Identifiable {
-    case welcome = "欢迎"
     case general = "通用"
     case control = "控制"
     case provider = "模型提供商"
@@ -15,28 +14,22 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
 
 struct MainSettingsView: View {
     @State private var draft: AppSettings
-    @State private var selectedTab: SettingsTab = .welcome
+    @State private var selectedTab: SettingsTab = .general
     @State private var isAddingModel = false
     @State private var editingModelProfileID: String?
     @State private var newModelProfile = ModelProfile(modelName: "", baseURL: "http://127.0.0.1:1234")
     @State private var isEditingAction = false
     @State private var editingActionProfileID: String?
     @State private var actionDraft = AIActionProfile(name: "", systemImage: "sparkles", prompt: "")
-    let statusText: String
-    let onStartCapture: () -> Void
     let onSaveSettings: (AppSettings) -> Void
     let onQuit: () -> Void
 
     init(
         settings: AppSettings,
-        statusText: String,
-        onStartCapture: @escaping () -> Void,
         onSaveSettings: @escaping (AppSettings) -> Void,
         onQuit: @escaping () -> Void
     ) {
         self._draft = State(initialValue: settings)
-        self.statusText = statusText
-        self.onStartCapture = onStartCapture
         self.onSaveSettings = onSaveSettings
         self.onQuit = onQuit
     }
@@ -56,8 +49,6 @@ struct MainSettingsView: View {
             .padding(.horizontal, 12)
 
             HStack {
-                Button("开始截图") { onStartCapture() }
-                    .buttonStyle(.borderedProminent)
                 Spacer()
                 Button("保存") { onSaveSettings(draft) }
                     .buttonStyle(.borderedProminent)
@@ -95,8 +86,6 @@ struct MainSettingsView: View {
     @ViewBuilder
     private var currentTab: some View {
         switch selectedTab {
-        case .welcome:
-            welcomeTab
         case .general:
             generalTab
         case .control:
@@ -110,74 +99,8 @@ struct MainSettingsView: View {
         }
     }
 
-    private var welcomeTab: some View {
-        HStack(spacing: 0) {
-            // Left: brand & info
-            VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("ClipWise")
-                        .font(.system(size: 22, weight: .bold))
-                    Text("截图智读助手")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                }
-
-                Text("按下全局快捷键截图，调用本地视觉语言模型\n进行翻译、OCR 识别或智能总结。")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(4)
-
-                Divider()
-
-                HStack(spacing: 6) {
-                    Image(systemName: "gearshape.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                    Text(statusText)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                        .lineLimit(2)
-                }
-                .padding(8)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color(nsColor: .textBackgroundColor))
-                )
-
-                Spacer()
-            }
-            .padding(18)
-
-            Spacer()
-
-            // Right: decorative icon
-            VStack {
-                Spacer()
-                Image(systemName: "sparkles.rectangle.stack.fill")
-                    .font(.system(size: 64))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.blue, .purple.opacity(0.7)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .opacity(0.5)
-                    .padding(.trailing, 24)
-                    .padding(.bottom, 18)
-            }
-        }
-    }
-
     private var generalTab: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Toggle("启动时显示主窗口", isOn: $draft.showControlWindowOnStartup)
-
-            Stepper(value: $draft.resultPanelHeight, in: 120...600, step: 20) {
-                Text("结果面板高度：\(draft.resultPanelHeight) px")
-            }
-
             Stepper(value: $draft.requestTimeoutSeconds, in: 10...600, step: 10) {
                 Text("AI 请求超时：\(draft.requestTimeoutSeconds) 秒")
             }
