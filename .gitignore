@@ -1,0 +1,27 @@
+# macOS
+.DS_Store
+
+# Swift Package Manager / Xcode build products
+.build/
+SnipConcludeMac/.build/
+DerivedData/
+*.xcuserdata/
+*.xcuserstate
+
+# Packaged app artifacts
+dist/
+*.app/
+*.zip
+*.dmg
+
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Local logs and temp files
+*.log
+*.tmp
