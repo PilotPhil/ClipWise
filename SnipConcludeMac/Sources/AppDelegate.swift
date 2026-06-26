@@ -96,9 +96,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.installHotkey()
                 self?.resultWindowController?.updateActionProfiles(newSettings.actionProfiles)
                 self?.resultWindowController?.setHideWindowsDuringCapture(newSettings.hideWindowsDuringCapture)
-            },
-            onQuit: {
-                NSApplication.shared.terminate(nil)
             }
         )
 

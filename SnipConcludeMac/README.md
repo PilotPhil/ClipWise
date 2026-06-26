@@ -26,8 +26,12 @@ swift run ClipWiseMac
 默认使用 ad-hoc 签名，适合发给熟人测试。正式 Developer ID 签名可运行：
 
 ```bash
+CLIPWISE_SIGN_IDENTITY=auto ./scripts/package_app.sh
+CLIPWISE_SIGN_IDENTITY="Apple Development: Your Name (TEAMID)" ./scripts/package_app.sh
 CLIPWISE_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./scripts/package_app.sh
 ```
+
+为了减少 macOS 反复要求“屏幕录制”和“辅助功能”授权，开发测试时建议使用固定 Bundle ID 和稳定签名身份反复打包同一个 `dist/ClipWise.app`。`CLIPWISE_SIGN_IDENTITY=auto` 会优先选择 Developer ID Application 证书，其次选择 Apple Development 证书；没有可用证书时可以继续使用默认 ad-hoc 签名。
 
 ## 图标资源
 

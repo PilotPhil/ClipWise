@@ -1,13 +1,18 @@
 import AppKit
+import Carbon.HIToolbox
 import CoreGraphics
 
 final class HotkeyMonitor {
     private let settings: AppSettings
     private let action: @MainActor @Sendable () -> Void
+    private var carbonHotKey: EventHotKeyRef?
+    private var carbonEventHandler: EventHandlerRef?
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var globalMonitor: Any?
     private var localMonitor: Any?
+    private static let carbonSignature = fourCharCode("CLPW")
+    private static let carbonHotKeyID: UInt32 = 1
 
     init(settings: AppSettings, action: @escaping @MainActor @Sendable () -> Void) {
         self.settings = settings
@@ -16,6 +21,9 @@ final class HotkeyMonitor {
 
     func start() {
         stop()
+        if startCarbonHotKey() {
+            return
+        }
         if startEventTap() {
             return
         }
@@ -29,6 +37,14 @@ final class HotkeyMonitor {
     }
 
     func stop() {
+        if let carbonHotKey {
+            UnregisterEventHotKey(carbonHotKey)
+            self.carbonHotKey = nil
+        }
+        if let carbonEventHandler {
+            RemoveEventHandler(carbonEventHandler)
+            self.carbonEventHandler = nil
+        }
         if let eventTap {
             CGEvent.tapEnable(tap: eventTap, enable: false)
             self.eventTap = nil
@@ -47,6 +63,69 @@ final class HotkeyMonitor {
         }
     }
 
+    private func startCarbonHotKey() -> Bool {
+        guard let keyCode = Self.keyCode(for: settings.captureHotkey.key) else { return false }
+
+        var eventType = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: UInt32(kEventHotKeyPressed)
+        )
+        let handlerStatus = InstallEventHandler(
+            GetApplicationEventTarget(),
+            { _, event, userData in
+                guard let event, let userData else { return noErr }
+
+                var hotKeyID = EventHotKeyID()
+                let status = GetEventParameter(
+                    event,
+                    EventParamName(kEventParamDirectObject),
+                    EventParamType(typeEventHotKeyID),
+                    nil,
+                    MemoryLayout<EventHotKeyID>.size,
+                    nil,
+                    &hotKeyID
+                )
+                guard status == noErr,
+                      hotKeyID.signature == HotkeyMonitor.carbonSignature,
+                      hotKeyID.id == HotkeyMonitor.carbonHotKeyID
+                else {
+                    return noErr
+                }
+
+                let monitor = Unmanaged<HotkeyMonitor>.fromOpaque(userData).takeUnretainedValue()
+                monitor.triggerAction()
+                return noErr
+            },
+            1,
+            &eventType,
+            Unmanaged.passUnretained(self).toOpaque(),
+            &carbonEventHandler
+        )
+        guard handlerStatus == noErr else { return false }
+
+        let hotKeyID = EventHotKeyID(
+            signature: Self.carbonSignature,
+            id: Self.carbonHotKeyID
+        )
+        let registerStatus = RegisterEventHotKey(
+            UInt32(keyCode),
+            carbonModifiers(),
+            hotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &carbonHotKey
+        )
+        if registerStatus != noErr {
+            if let carbonEventHandler {
+                RemoveEventHandler(carbonEventHandler)
+                self.carbonEventHandler = nil
+            }
+            carbonHotKey = nil
+            return false
+        }
+        return true
+    }
+
     private func startEventTap() -> Bool {
         let mask = CGEventMask(1 << CGEventType.keyDown.rawValue)
         let refcon = Unmanaged.passUnretained(self).toOpaque()
@@ -60,6 +139,12 @@ final class HotkeyMonitor {
                     return Unmanaged.passUnretained(event)
                 }
                 let monitor = Unmanaged<HotkeyMonitor>.fromOpaque(refcon).takeUnretainedValue()
+                if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                    if let eventTap = monitor.eventTap {
+                        CGEvent.tapEnable(tap: eventTap, enable: true)
+                    }
+                    return Unmanaged.passUnretained(event)
+                }
                 monitor.handle(event: event, type: type)
                 return Unmanaged.passUnretained(event)
             },
@@ -82,12 +167,28 @@ final class HotkeyMonitor {
         guard type == .keyDown else { return }
         guard event.getIntegerValueField(.keyboardEventAutorepeat) == 0 else { return }
         guard matches(event) else { return }
-        Task { @MainActor [action] in action() }
+        triggerAction()
     }
 
     private func handle(_ event: NSEvent) {
         guard matches(event) else { return }
+        guard !event.isARepeat else { return }
+        triggerAction()
+    }
+
+    private func triggerAction() {
         Task { @MainActor [action] in action() }
+    }
+
+    private func carbonModifiers() -> UInt32 {
+        let hotkey = settings.captureHotkey
+        var modifiers: UInt32 = 0
+        if hotkey.control { modifiers |= UInt32(controlKey) }
+        if hotkey.shift { modifiers |= UInt32(shiftKey) }
+        if hotkey.option { modifiers |= UInt32(optionKey) }
+        if hotkey.command { modifiers |= UInt32(cmdKey) }
+        if hotkey.fn { modifiers |= UInt32(kEventKeyModifierFnMask) }
+        return modifiers
     }
 
     private func matches(_ event: NSEvent) -> Bool {
@@ -162,6 +263,12 @@ final class HotkeyMonitor {
         case "m": return 46
         case ".": return 47
         default: return nil
+        }
+    }
+
+    private static func fourCharCode(_ value: String) -> OSType {
+        value.utf8.prefix(4).reduce(OSType(0)) { result, byte in
+            (result << 8) + OSType(byte)
         }
     }
 }

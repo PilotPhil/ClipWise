@@ -20,18 +20,16 @@ struct MainSettingsView: View {
     @State private var newModelProfile = ModelProfile(modelName: "", baseURL: "http://127.0.0.1:1234")
     @State private var isEditingAction = false
     @State private var editingActionProfileID: String?
+    @State private var draggingActionProfileID: String?
     @State private var actionDraft = AIActionProfile(name: "", systemImage: "sparkles", prompt: "")
     let onSaveSettings: (AppSettings) -> Void
-    let onQuit: () -> Void
 
     init(
         settings: AppSettings,
-        onSaveSettings: @escaping (AppSettings) -> Void,
-        onQuit: @escaping () -> Void
+        onSaveSettings: @escaping (AppSettings) -> Void
     ) {
         self._draft = State(initialValue: settings)
         self.onSaveSettings = onSaveSettings
-        self.onQuit = onQuit
     }
 
     var body: some View {
@@ -47,18 +45,12 @@ struct MainSettingsView: View {
                 Divider()
             }
             .padding(.horizontal, 12)
-
-            HStack {
-                Spacer()
-                Button("保存") { onSaveSettings(draft) }
-                    .buttonStyle(.borderedProminent)
-                Button("退出") { onQuit() }
-            }
-            .padding(.horizontal, 14)
-            .padding(.bottom, 10)
         }
-        .frame(minWidth: 500, idealWidth: 560, minHeight: 360, idealHeight: 410)
+        .frame(minWidth: 500, idealWidth: 560, minHeight: 330, idealHeight: 370)
         .background(Color(nsColor: .windowBackgroundColor))
+        .onChange(of: draft) { newValue in
+            onSaveSettings(newValue)
+        }
     }
 
     private var tabRow: some View {
@@ -261,6 +253,22 @@ struct MainSettingsView: View {
                     VStack(spacing: 8) {
                         ForEach(draft.actionProfiles) { profile in
                             actionProfileRow(profile)
+                                .opacity(draggingActionProfileID == profile.id ? 0.55 : 1)
+                                .onDrag {
+                                    draggingActionProfileID = profile.id
+                                    return NSItemProvider(object: profile.id as NSString)
+                                }
+                                .onDrop(
+                                    of: [.text],
+                                    delegate: ActionProfileDropDelegate(
+                                        targetProfile: profile,
+                                        profiles: $draft.actionProfiles,
+                                        draggingProfileID: $draggingActionProfileID,
+                                        onDropCompleted: {
+                                            persistActionProfileOrder()
+                                        }
+                                    )
+                                )
                         }
                     }
                 }
@@ -432,6 +440,12 @@ struct MainSettingsView: View {
 
     private func actionProfileRow(_ profile: AIActionProfile) -> some View {
         HStack(spacing: 10) {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.tertiary)
+                .frame(width: 16)
+                .help("拖拽排序")
+
             ActionIconView(profile: profile, size: 18)
                 .frame(width: 22)
 
@@ -479,6 +493,7 @@ struct MainSettingsView: View {
             RoundedRectangle(cornerRadius: 8)
                 .fill(Color(nsColor: .controlColor))
         )
+        .contentShape(RoundedRectangle(cornerRadius: 8))
     }
 
     private func beginAddingAction() {
@@ -535,6 +550,44 @@ struct MainSettingsView: View {
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         draft.actionProfiles.removeAll { $0.id == profile.id }
         onSaveSettings(draft)
+    }
+
+    private func persistActionProfileOrder() {
+        onSaveSettings(draft)
+    }
+}
+
+private struct ActionProfileDropDelegate: DropDelegate {
+    let targetProfile: AIActionProfile
+    @Binding var profiles: [AIActionProfile]
+    @Binding var draggingProfileID: String?
+    let onDropCompleted: () -> Void
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard let draggingProfileID,
+              draggingProfileID != targetProfile.id,
+              let fromIndex = profiles.firstIndex(where: { $0.id == draggingProfileID }),
+              let toIndex = profiles.firstIndex(where: { $0.id == targetProfile.id })
+        else {
+            return
+        }
+
+        withAnimation(.easeInOut(duration: 0.12)) {
+            profiles.move(
+                fromOffsets: IndexSet(integer: fromIndex),
+                toOffset: toIndex > fromIndex ? toIndex + 1 : toIndex
+            )
+        }
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggingProfileID = nil
+        onDropCompleted()
+        return true
     }
 }
 

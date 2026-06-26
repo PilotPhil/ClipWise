@@ -41,6 +41,14 @@ Package a test app bundle from the repository root:
 ./scripts/package_app.sh
 ```
 
+Use a stable signing identity to reduce repeated macOS Screen Recording and Accessibility permission prompts after rebuilds:
+
+```bash
+CLIPWISE_SIGN_IDENTITY=auto ./scripts/package_app.sh
+CLIPWISE_SIGN_IDENTITY="Apple Development: Your Name (TEAMID)" ./scripts/package_app.sh
+CLIPWISE_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./scripts/package_app.sh
+```
+
 Outputs:
 
 - `dist/ClipWise.app`
@@ -105,7 +113,7 @@ python snip_conclude.py
 - `scripts/generate_icons.swift`
   AppKit drawing script that generates the app icon, `.icns`, and status bar template icons.
 - `scripts/package_app.sh`
-  Builds the release executable, creates `dist/ClipWise.app`, copies icon resources, writes `Info.plist`, signs, and zips the test build.
+  Builds the release executable, creates `dist/ClipWise.app`, copies icon resources, writes `Info.plist`, signs, verifies the signature, and zips the test build. Supports `CLIPWISE_SIGN_IDENTITY=auto`, explicit Apple Development / Developer ID identities, and ad-hoc fallback with `CLIPWISE_SIGN_IDENTITY=-`.
 
 ### Python Version
 
@@ -157,5 +165,6 @@ python snip_conclude.py
 - Do not downgrade hotkey handling back to only `NSEvent.addGlobalMonitorForEvents`; that can fail when the app window is not active/visible.
 - Keep all screenshot entry points routed through `AppDelegate.startCapture()` so window hiding, coordinate handling, and restoration behavior stay consistent.
 - If icon styling changes, edit `scripts/generate_icons.swift` and regenerate assets instead of hand-editing generated PNGs.
+- For local permission stability, package and run a fixed `.app` path with a stable `CLIPWISE_BUNDLE_ID` and stable `CLIPWISE_SIGN_IDENTITY`; repeatedly running unsigned SwiftPM build products can cause macOS TCC to request permissions again.
 - Use `apply_patch` for manual edits.
 - Run `swift build` after Swift changes. It may require broader filesystem access because SwiftPM writes to Xcode/Swift caches outside the workspace.

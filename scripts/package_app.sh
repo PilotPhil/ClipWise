@@ -16,7 +16,62 @@ ZIP_PATH="$DIST_DIR/$APP_NAME.zip"
 VERSION="${CLIPWISE_VERSION:-0.1.0}"
 BUILD_NUMBER="${CLIPWISE_BUILD:-1}"
 BUNDLE_ID="${CLIPWISE_BUNDLE_ID:-com.pilotphil.clipwise}"
-SIGN_IDENTITY="${CLIPWISE_SIGN_IDENTITY:--}"
+SIGN_IDENTITY="${CLIPWISE_SIGN_IDENTITY:-${CODESIGN_IDENTITY:--}}"
+SIGN_VERIFY="${CLIPWISE_SIGN_VERIFY:-1}"
+
+resolve_sign_identity() {
+    local requested="$1"
+    if [[ "$requested" != "auto" ]]; then
+        printf '%s\n' "$requested"
+        return
+    fi
+
+    local identity
+    identity="$(
+        security find-identity -v -p codesigning 2>/dev/null \
+            | awk -F'"' '/Developer ID Application/ { print $2; exit }'
+    )"
+    if [[ -z "$identity" ]]; then
+        identity="$(
+            security find-identity -v -p codesigning 2>/dev/null \
+                | awk -F'"' '/Apple Development/ { print $2; exit }'
+        )"
+    fi
+
+    if [[ -z "$identity" ]]; then
+        echo "No Developer ID Application or Apple Development signing identity found." >&2
+        echo "Install an Apple signing certificate or use CLIPWISE_SIGN_IDENTITY=- for ad-hoc signing." >&2
+        exit 1
+    fi
+    printf '%s\n' "$identity"
+}
+
+codesign_timestamp_args() {
+    local identity="$1"
+    local requested="${CLIPWISE_CODESIGN_TIMESTAMP:-auto}"
+
+    case "$requested" in
+        1|true|yes)
+            printf '%s\n' "--timestamp"
+            ;;
+        0|false|no)
+            printf '%s\n' "--timestamp=none"
+            ;;
+        auto)
+            if [[ "$identity" == Developer\ ID\ Application:* ]]; then
+                printf '%s\n' "--timestamp"
+            else
+                printf '%s\n' "--timestamp=none"
+            fi
+            ;;
+        *)
+            echo "Invalid CLIPWISE_CODESIGN_TIMESTAMP=$requested. Use auto, true, or false." >&2
+            exit 1
+            ;;
+    esac
+}
+
+SIGN_IDENTITY="$(resolve_sign_identity "$SIGN_IDENTITY")"
 
 echo "==> Building release binary"
 cd "$PROJECT_DIR"
@@ -79,7 +134,14 @@ echo "==> Signing app bundle"
 if [[ "$SIGN_IDENTITY" == "-" ]]; then
     codesign --force --deep --sign - "$APP_BUNDLE"
 else
-    codesign --force --deep --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
+    TIMESTAMP_ARG="$(codesign_timestamp_args "$SIGN_IDENTITY")"
+    codesign --force --deep --options runtime "$TIMESTAMP_ARG" --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
+fi
+
+if [[ "$SIGN_VERIFY" == "1" || "$SIGN_VERIFY" == "true" || "$SIGN_VERIFY" == "yes" ]]; then
+    echo "==> Verifying signature"
+    codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
+    codesign --display --verbose=2 "$APP_BUNDLE" 2>&1 | sed 's/^/    /'
 fi
 
 echo "==> Creating zip"
@@ -91,5 +153,15 @@ echo "Done:"
 echo "  $APP_BUNDLE"
 echo "  $ZIP_PATH"
 echo
-echo "For Developer ID signing, run for example:"
+echo "Signing identity:"
+echo "  $SIGN_IDENTITY"
+echo
+echo "Stable local development signing:"
+echo "  CLIPWISE_SIGN_IDENTITY=auto ./scripts/package_app.sh"
+echo "  CLIPWISE_SIGN_IDENTITY=\"Apple Development: Your Name (TEAMID)\" ./scripts/package_app.sh"
+echo
+echo "Developer ID signing for external testers:"
 echo "  CLIPWISE_SIGN_IDENTITY=\"Developer ID Application: Your Name (TEAMID)\" ./scripts/package_app.sh"
+echo
+echo "Bundle ID:"
+echo "  $BUNDLE_ID"

@@ -228,13 +228,21 @@ struct AppSettings: Codable, Equatable, Sendable {
             return normalized
         }
 
-        let builtInProfiles = AIActionProfile.defaultProfiles.compactMap { defaultProfile in
-            cleaned.first(where: { $0.id == defaultProfile.id })
+        let defaultProfilesByID = Dictionary(
+            uniqueKeysWithValues: AIActionProfile.defaultProfiles.map { ($0.id, $0) }
+        )
+        var orderedProfiles = cleaned.map { profile in
+            var normalized = profile
+            if defaultProfilesByID[normalized.id] != nil {
+                normalized.isBuiltIn = true
+            }
+            return normalized
         }
-        let customProfiles = cleaned.filter { profile in
-            !AIActionProfile.defaultProfiles.contains(where: { $0.id == profile.id })
+        for defaultProfile in AIActionProfile.defaultProfiles
+        where !orderedProfiles.contains(where: { $0.id == defaultProfile.id }) {
+            orderedProfiles.append(defaultProfile)
         }
-        return builtInProfiles + customProfiles
+        return orderedProfiles
     }
 }
 
